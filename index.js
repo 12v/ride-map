@@ -11,39 +11,39 @@ function getAccessToken() {
     }
 }
 
-let firstAttempt = true;
+async function fetchWithAccessToken(url) {
+    let firstAttempt = true;
 
-function fetchActivities(callback, finalCallback) {
-    function internal(page = 1) {
-        return fetch(`https://www.strava.com/api/v3/athlete/activities?page=${page}&per_page=200`, {
+    function internal() {
+        return fetch(url, {
             headers: {
                 'Authorization': 'Bearer ' + getAccessToken()
             }
         })
-            .then(response => {
-                if (response.status !== 200) {
-                    throw response;
-                } else {
-                    return response.json();
-                }
-            })
-            .then(data => {
-                if (data.length > 0) {
-                    internal(page + 1);
-                    data.forEach(callback);
-                    finalCallback();
-                }
-            })
-            .catch(error => {
-                if (error.status === 401 && firstAttempt) {
-                    firstAttempt = false;
-                    localStorage.removeItem('access_token');
-                    localStorage.removeItem('expiry_date');
-                    return internal(page, activities);
-                } else {
-                    throw error;
-                }
-            });
+    }
+
+    const response = await internal();
+    if (response.status === 200) {
+        return response;
+    } else if (response.status === 401 && firstAttempt) {
+        firstAttempt = false;
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('expiry_date');
+        return internal();
+    } else {
+        throw error;
+    }
+}
+
+function fetchActivities(callback, finalCallback) {
+    async function internal(page = 1) {
+        const response = await fetchWithAccessToken(`https://www.strava.com/api/v3/athlete/activities?page=${page}&per_page=200`);
+        const data = await response.json();
+        if (data.length > 0) {
+            internal(page + 1);
+            data.forEach(callback);
+            finalCallback();
+        }
     }
 
     internal();
@@ -63,33 +63,38 @@ function showActivities() {
             if (activity.type === 'Ride') {
                 const polyline = activity.map.summary_polyline;
                 if (polyline) {
-                    const decoded = L.Polyline.fromEncoded(polyline).getLatLngs();
-                    L.polyline(decoded).addTo(group);
+                    L.Polyline.fromEncoded(polyline).addTo(group);
                 }
             }
         },
         () => map.fitBounds(group.getBounds()));
 }
 
-if (window.location.search !== '') {
+async function handleTokenExchange() {
     const urlParams = new URLSearchParams(window.location.search);
     const grantedScopes = urlParams.get('scope').split(',');
+
     if (!scopes.every(scope => grantedScopes.includes(scope))) {
         console.error('The user did not grant all the required scopes.');
-
     } else {
         const code = urlParams.get('code');
 
-        fetch(`https://strava-token-exchanger.12v.workers.dev/${code}`, {
+        const response = await fetch(`https://strava-token-exchanger.12v.workers.dev/${code}`, {
             mode: 'cors',
-        })
-            .then(response => response.json())
-            .then(data => {
-                localStorage.setItem('access_token', data.access_token);
-                localStorage.setItem('expiry_date', data.expires_at * 1000);
-                window.location.href = window.location.origin + window.location.pathname;
-            })
+        });
+        const data = await response.json();
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('expiry_date', data.expires_at * 1000);
     }
-} else {
+}
+
+async function init() {
+    if (window.location.search !== '') {
+        await handleTokenExchange();
+        history.replaceState({}, document.title, window.location.pathname);
+    }
+
     showActivities();
 }
+
+init();
