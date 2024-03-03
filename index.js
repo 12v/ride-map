@@ -7,7 +7,7 @@ function getAccessToken() {
     if (accessToken && expiryDate && Date.now() < expiryDate) {
         return localStorage.getItem('access_token');
     } else {
-        window.location.href = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${window.location.origin + window.location.pathname}&approval_prompt=force&scope=${scopes.join(',')}`;
+        window.location.href = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${window.location.origin + window.location.pathname}&approval_prompt=auto&scope=${scopes.join(',')}`;
     }
 }
 
@@ -63,7 +63,7 @@ function showActivities() {
             if (activity.type === 'Ride') {
                 const polyline = activity.map.summary_polyline;
                 if (polyline) {
-                    L.Polyline.fromEncoded(polyline).addTo(group);
+                    L.Polyline.fromEncoded(polyline, { weight: 3 }).addTo(group);
                 }
             }
         },
