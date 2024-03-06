@@ -7,7 +7,12 @@ function getAccessToken() {
     if (accessToken && expiryDate && Date.now() < expiryDate) {
         return localStorage.getItem('access_token');
     } else {
-        window.location.href = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${window.location.origin + window.location.pathname}&approval_prompt=auto&scope=${scopes.join(',')}`;
+        var modal = document.getElementById("myModal");
+        var btn = document.getElementById("stravaButton");
+        btn.onclick = function () {
+            window.location.href = `https://www.strava.com/oauth/mobile/authorize?client_id=${clientId}&response_type=code&redirect_uri=${window.location.origin + window.location.pathname}&approval_prompt=auto&scope=${scopes.join(',')}`;
+        }
+        modal.style.display = "block";
     }
 }
 
@@ -50,24 +55,69 @@ function fetchActivities(callback, finalCallback) {
 }
 
 function showActivities() {
-    const map = L.map('map');
+    let hasInteracted = false;
+
+    const map = L.map('map')
+        .on('zoomstart', () => hasInteracted = true)
+        .on('movestart', () => hasInteracted = true);
+
     const group = L.featureGroup().addTo(map);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> | <img src="strava api logos/powered by Strava/pwrdBy_strava_light/api_logo_pwrdBy_strava_horiz_light.png" alt="Powered by Strava" style="vertical-align: bottom; height: 2em;">'
     }).addTo(map);
+
+    const lines = [];
+    let clickedLine = null;
 
     fetchActivities(
         activity => {
             if (activity.type === 'Ride') {
                 const polyline = activity.map.summary_polyline;
                 if (polyline) {
-                    L.Polyline.fromEncoded(polyline, { weight: 3 }).addTo(group);
+                    const line = L.Polyline.fromEncoded(polyline, { weight: 3, color: 'blue' }).addTo(group);
+                    lines.push(line);
+
+                    line.on('mouseover', function () {
+                        if (this !== clickedLine) {
+                            this.setStyle({
+                                color: 'red'
+                            });
+                        }
+                    });
+
+                    line.on('mouseout', function () {
+                        console.log(this);
+                        console.log(clickedLine);
+                        if (this !== clickedLine) {
+                            this.setStyle({
+                                color: 'blue'
+                            });
+                        }
+                    });
+
+                    line.on('click', function () {
+                        this.setStyle({
+                            color: 'green'
+                        });
+
+                        clickedLine = this;
+
+                        lines.filter(l => l !== clickedLine)
+                            .forEach(l => l.setStyle({
+                                color: 'blue'
+                            }));
+                    });
+
+                    const date = new Date(activity.start_date_local);
+                    const dateString = date.toLocaleDateString();
+
+                    line.bindPopup(`<div class="centered-popup">${activity.name}<br>${dateString}<br><a target="_blank" rel="noreferrer" href="https://www.strava.com/activities/${activity.id}">View on Strava</a></div>`);
                 }
             }
         },
-        () => map.fitBounds(group.getBounds()));
+        () => !hasInteracted && map.fitBounds(group.getBounds()));
 }
 
 async function handleTokenExchange() {
